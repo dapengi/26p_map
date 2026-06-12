@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NM 2026 Primary — Precinct Results</title>
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css" rel="stylesheet" />
+  <link href="styles.css" rel="stylesheet" />
+</head>
+<body>
+  <div id="sidebar">
+    <h1>NM 2026 Primary</h1>
+    <p id="reporting" class="muted"></p>
+
+    <label>Race
+      <select id="race"></select>
+    </label>
+
+    <span class="ctl-label">View mode</span>
+    <div id="mode-seg" class="segmented">
+      <button type="button" data-mode="winner" class="active">Winner by party</button>
+      <button type="button" data-mode="candidate">Candidate vote share</button>
+      <button type="button" data-mode="turnout">Party turnout (D vs R)</button>
+    </div>
+
+    <div id="party-ctl">
+      <label>Primary
+        <select id="party"></select>
+      </label>
+    </div>
+
+    <div id="candidate-ctl" hidden>
+      <label>Candidate
+        <select id="candidate"></select>
+      </label>
+    </div>
+
+    <hr>
+
+    <label>County
+      <select id="county"></select>
+    </label>
+    <label>Precinct #
+      <input id="precinct" type="number" min="1" placeholder="e.g. 12" />
+    </label>
+
+    <hr>
+    <div id="legend"></div>
+
+    <hr>
+    <div id="race-totals"></div>
+  </div>
+
+  <div id="map"></div>
+  <div id="loading">Loading…</div>
+
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
