@@ -1,7 +1,7 @@
 /* NM 2026 Primary precinct viz. Static, no build step. */
 
 const MAPBOX_TOKEN =
-  "pk.eyJ1IjoiYWdlbmRhZGlnaXRhbCIsImEiOiJja3lidHNmbW4wNGxsMnFtb2N1NmRwcWk1In0.poxNtG_qRaxwQOozAFbU-w";
+  "pk.eyJ1IjoiYWdlbmRhZGlnaXRhbCIsImEiOiJjbXFhajJlYjYwNzE3MndwenU0ZXBoOGx4In0.R9JL-IBJPFkBmsPWEJlcQw";
 
 const NM_BOUNDS = [[-109.2, 31.2], [-102.9, 37.1]];
 const NO_DATA_COLOR = "#3a3f4b";
@@ -57,6 +57,27 @@ function styleFeatures() {
     let color = NO_DATA_COLOR;
     let opacity = r ? 0.85 : 0.12;
 
+    // County-isolate mode: show only the selected county's precincts
+    // (colored by winner of the selected primary), hide the rest.
+    if (mode === "county") {
+      if (county !== "ALL" && p.COUNTY_NAM !== county) {
+        p._color = NO_DATA_COLOR;
+        p._opacity = 0;
+        continue;
+      }
+      const w = r && r.winner[party];
+      if (w) {
+        color = candByKey(w).color;
+        opacity = 0.35 + 0.65 * Math.min(r.margin[party] / 0.5, 1);
+      } else {
+        color = NO_DATA_COLOR;
+        opacity = r ? 0.15 : 0.12;
+      }
+      p._color = color;
+      p._opacity = opacity;
+      continue;
+    }
+
     if (r) {
       if (mode === "winner") {
         const w = r.winner[party];
@@ -96,14 +117,20 @@ function styleFeatures() {
 /* ---------- legend ---------- */
 function renderLegend() {
   const el = $("legend");
-  const { mode, party, candidate, raceData } = state;
-  if (mode === "winner") {
+  const { mode, party, candidate, raceData, county } = state;
+  if (mode === "winner" || mode === "county") {
     const rows = candsForParty(party)
       .map((c) => `<div class="legend-row"><span class="swatch" style="background:${c.color}"></span>${c.name}</div>`)
       .join("");
-    el.innerHTML = `<h3>${raceData.party_labels[party]} winner</h3>${rows}
+    const hint = mode === "county"
+      ? (county === "ALL"
+          ? `<p class="muted">Pick a county below to isolate it.</p>`
+          : `<p class="muted">Showing ${county} only. Shade = win margin.</p>`)
+      : `<p class="muted">Shade intensity = win margin.</p>`;
+    const head = mode === "county" ? `${raceData.party_labels[party]} winner — by county` : `${raceData.party_labels[party]} winner`;
+    el.innerHTML = `<h3>${head}</h3>${rows}
       <div class="legend-row"><span class="swatch" style="background:${NO_DATA_COLOR}"></span>no data / no shape</div>
-      <p class="muted">Shade intensity = win margin.</p>`;
+      ${hint}`;
   } else if (mode === "candidate") {
     const c = candByKey(candidate);
     el.innerHTML = `<h3>${c.name} — vote share</h3>
@@ -121,23 +148,35 @@ function renderLegend() {
 function renderRaceTotals() {
   const el = $("race-totals");
   const cands = state.raceData.candidates;
+  // In County mode with a county chosen, totals reflect just that county.
+  const scoped = state.mode === "county" && state.county !== "ALL";
   const totals = Object.fromEntries(cands.map((c) => [c.key, 0]));
   for (const r of Object.values(state.raceData.results)) {
+    if (scoped && r.county !== state.county) continue;
     for (const c of cands) totals[c.key] += r.counts[c.key] || 0;
   }
-  const grand = Object.values(totals).reduce((a, b) => a + b, 0);
-  const rows = cands
-    .map((c) => ({ c, v: totals[c.key] }))
-    .sort((a, b) => b.v - a.v)
-    .map(({ c, v }) => {
-      const pct = grand ? ((v / grand) * 100).toFixed(1) : "0.0";
-      return `<div class="totals-row">
-        <span><span class="dot" style="background:${c.color}"></span>${c.name}</span>
-        <span>${v.toLocaleString()}<span class="pct">${pct}%</span></span></div>`;
-    })
-    .join("");
-  el.innerHTML = `<h3>Race totals — all precincts</h3>${rows}
-    <div class="totals-sum"><span>Total votes</span><span>${grand.toLocaleString()}</span></div>`;
+  // Each party is its own primary contest — group + subtotal per party,
+  // never pool across parties (that would imply they ran against each other).
+  const present = ["R", "D"].filter((p) => cands.some((c) => c.party === p));
+  const heading = scoped ? `Race totals — ${state.county}` : "Race totals — all precincts";
+  let html = `<h3>${heading}</h3>`;
+  for (const p of present) {
+    const pc = cands.filter((c) => c.party === p);
+    const sub = pc.reduce((a, c) => a + totals[c.key], 0);
+    html += `<div class="totals-party">${state.raceData.party_labels[p]} primary</div>`;
+    html += pc
+      .map((c) => ({ c, v: totals[c.key] }))
+      .sort((a, b) => b.v - a.v)
+      .map(({ c, v }) => {
+        const pct = sub ? ((v / sub) * 100).toFixed(1) : "0.0";
+        return `<div class="totals-row">
+          <span><span class="dot" style="background:${c.color}"></span>${c.name}</span>
+          <span>${v.toLocaleString()}<span class="pct">${pct}%</span></span></div>`;
+      })
+      .join("");
+    html += `<div class="totals-sum"><span>${state.raceData.party_labels[p]} total</span><span>${sub.toLocaleString()}</span></div>`;
+  }
+  el.innerHTML = html;
 }
 
 /* ---------- popup ---------- */
@@ -209,7 +248,11 @@ async function init() {
     });
     map.addLayer({
       id: "precinct-line", type: "line", source: "precincts",
-      paint: { "line-color": "#555", "line-width": 0.3, "line-opacity": 0.5 },
+      paint: {
+        "line-color": "#1a1a1a",
+        "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.4, 9, 0.9, 12, 1.6, 15, 2.6],
+        "line-opacity": ["interpolate", ["linear"], ["zoom"], 6, 0.5, 10, 0.8],
+      },
     });
     styleFeatures();
     map.on("click", "precinct-fill", (e) => {
@@ -275,6 +318,7 @@ function populateCounty() {
     sel.appendChild(o);
   });
   sel.value = "ALL";
+  state.county = "ALL";
 }
 
 /* ---------- county zoom ---------- */
@@ -291,6 +335,23 @@ function zoomCounty(county) {
   }
   if (found) map.fitBounds([[minX, minY], [maxX, maxY]], { padding: 40 });
 }
+// Fit the map to the precincts that belong to the current race.
+// District races (CD/HD/SD) zoom in tight; statewide races fill the state.
+function fitRaceBounds() {
+  const res = state.raceData.results;
+  let minX = 180, minY = 90, maxX = -180, maxY = -90, found = false;
+  for (const f of state.geo.features) {
+    if (!res[f.properties.join_id]) continue;
+    found = true;
+    eachCoord(f.geometry, (x, y) => {
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+    });
+  }
+  if (found) map.fitBounds([[minX, minY], [maxX, maxY]], { padding: 30, duration: 700 });
+  else map.fitBounds(NM_BOUNDS, { padding: 20 });
+}
+
 function eachCoord(geom, cb) {
   const walk = (a) => {
     if (typeof a[0] === "number") { cb(a[0], a[1]); return; }
@@ -327,6 +388,7 @@ function wireControls() {
   $("race").addEventListener("change", async (e) => {
     await loadRace(e.target.value);
     styleFeatures();
+    fitRaceBounds();
   });
   $("mode-seg").addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-mode]");
@@ -336,7 +398,9 @@ function wireControls() {
       b.classList.toggle("active", b === btn)
     );
     syncModeControls();
+    if (state.mode === "county" && state.county !== "ALL") zoomCounty(state.county);
     styleFeatures();
+    renderRaceTotals();
   });
   $("party").addEventListener("change", (e) => { state.party = e.target.value; styleFeatures(); });
   $("candidate").addEventListener("change", (e) => { state.candidate = e.target.value; styleFeatures(); });
@@ -344,6 +408,7 @@ function wireControls() {
     state.county = e.target.value;
     zoomCounty(state.county);
     styleFeatures();
+    renderRaceTotals();
   });
   $("precinct").addEventListener("change", (e) => {
     const num = e.target.value;

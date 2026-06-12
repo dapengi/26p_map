@@ -40,6 +40,8 @@ hr { border: 0; border-top: 1px solid #39404f; margin: 16px 0; }
 .totals-row { display: flex; justify-content: space-between; gap: 10px; margin: 5px 0; font-size: 13px; align-items: baseline; }
 .totals-row .pct { color: #9aa3b2; font-size: 11px; margin-left: 6px; }
 #race-totals .dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+.totals-party { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: #9aa3b2; margin: 14px 0 4px; }
+.totals-party:first-of-type { margin-top: 2px; }
 .totals-sum { display: flex; justify-content: space-between; border-top: 1px solid #39404f; margin-top: 6px; padding-top: 5px; font-weight: 600; font-size: 13px; }
 
 #map { flex: 1; height: 100vh; }
